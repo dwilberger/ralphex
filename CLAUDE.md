@@ -43,6 +43,49 @@ Without `RALPHEX_IMAGE` set, `ralphex` pulls the published image and runs WITHOU
 
 Remove this section once the fix ships in an official release and `ghcr.io/umputun/ralphex-go:latest` includes it.
 
+## CRITICAL: Running Two Ralphex Sessions in Parallel With Dashboards
+
+This is the operator's actual usage pattern. Read this carefully before launching anything.
+
+**Mandatory flags for parallel safety:**
+- `--worktree` on EVERY parallel run. Without it, both sessions stomp on each other's git state in the same working tree, corrupting branches and commits. Worktrees isolate to `.ralphex/worktrees/<branch>/`.
+- `RALPHEX_PORT` distinct per terminal when both use `--serve`. Default is 8080; the second session must use a different host port (e.g., 8081). The container internally always serves on 8080; `RALPHEX_PORT` only changes the host-side mapping.
+
+**Container naming:** the wrapper does NOT pass `--name` to docker, so containers get random names. No conflict by name even with many parallel runs.
+
+**Reference invocation (terminal 1):**
+
+```bash
+export RALPHEX_IMAGE=ralphex-go-local:dev   # use the local diagnostic-fix image
+export RALPHEX_PORT=8080
+ralphex --serve --worktree docs/plans/feature-A.md
+# dashboard: http://localhost:8080
+```
+
+**Reference invocation (terminal 2, simultaneous):**
+
+```bash
+export RALPHEX_IMAGE=ralphex-go-local:dev
+export RALPHEX_PORT=8081
+ralphex --serve --worktree docs/plans/feature-B.md
+# dashboard: http://localhost:8081
+```
+
+**Common failure modes:**
+- Forgot `--worktree`: branches get mixed, commits land on the wrong branch, plan files clash. Recovery is painful.
+- Same `RALPHEX_PORT` in both terminals with `--serve`: second `docker run` fails with "port already allocated".
+- Wrong `RALPHEX_IMAGE` (or unset): runs the published image without the diagnostic banner / boot probe.
+
+**Single session with dashboard (no parallelism):**
+
+```bash
+export RALPHEX_IMAGE=ralphex-go-local:dev
+ralphex --serve docs/plans/feature.md
+# dashboard at http://localhost:8080 (default)
+```
+
+**Worktree cleanup:** ralphex auto-removes the worktree on completion, failure, or SIGINT. The branch is preserved so you can review or PR it. If you ever need to clean up orphaned worktrees, `git worktree prune` from the main repo.
+
 ## Docker Image: Local Build vs Release
 
 Use a locally-built image when iterating on ralphex itself; use the official release (`ghcr.io/umputun/ralphex-go:latest`) when driving other projects with ralphex.
