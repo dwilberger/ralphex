@@ -23,24 +23,24 @@ Relevant existing surfaces to reference:
 
 ### Task 1: Add the section to CLAUDE.md
 
-- [ ] Open `CLAUDE.md` and find an appropriate insertion point (after "Build Commands" section is a natural fit, or before "Workflow Rules")
-- [ ] Add a new section with a heading like `## Running Locally vs Release` or `## Docker Image: Local Build vs Release`
-- [ ] Include a command block for building locally:
+- [x] Open `CLAUDE.md` and find an appropriate insertion point (after "Build Commands" section is a natural fit, or before "Workflow Rules")
+- [x] Add a new section with a heading like `## Running Locally vs Release` or `## Docker Image: Local Build vs Release`
+- [x] Include a command block for building locally:
   ```bash
   docker build -t ralphex-local:dev .
   docker build -t ralphex-go-local:dev -f Dockerfile-go --build-arg BASE_TAG=dev .
   export RALPHEX_IMAGE=ralphex-go-local:dev
   ralphex docs/plans/feature.md
   ```
-- [ ] Include a note for using the official release:
+- [x] Include a note for using the official release:
   ```bash
   # default: wrapper pulls the latest published image automatically
   unset RALPHEX_IMAGE  # or leave unset
   ralphex docs/plans/feature.md
   ```
-- [ ] Add one sentence explaining the decision: local when iterating on ralphex itself, release when using ralphex to drive other projects
-- [ ] Keep the whole section under 25 lines
-- [ ] Stage and commit: `docs: document local Docker image vs release usage`
+- [x] Add one sentence explaining the decision: local when iterating on ralphex itself, release when using ralphex to drive other projects
+- [x] Keep the whole section under 25 lines
+- [x] Stage and commit: `docs: document local Docker image vs release usage`
 
 ## Validation
 

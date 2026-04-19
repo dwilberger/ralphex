@@ -25,6 +25,27 @@ go get -u -tags=e2e github.com/playwright-community/playwright-go  # update e2e 
 go mod tidy && go mod vendor                             # tidy and re-vendor
 ```
 
+## Docker Image: Local Build vs Release
+
+Use a locally-built image when iterating on ralphex itself; use the official release (`ghcr.io/umputun/ralphex-go:latest`) when driving other projects with ralphex.
+
+Local build (for dev on ralphex):
+
+```bash
+docker build -t ralphex-local:dev .
+docker build -t ralphex-go-local:dev -f Dockerfile-go --build-arg BASE_TAG=dev .
+export RALPHEX_IMAGE=ralphex-go-local:dev
+ralphex docs/plans/feature.md
+```
+
+Official release (default):
+
+```bash
+# wrapper pulls the latest published image automatically
+unset RALPHEX_IMAGE  # or leave unset
+ralphex docs/plans/feature.md
+```
+
 ## Project Structure
 
 ```
