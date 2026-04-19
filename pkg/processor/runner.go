@@ -1166,8 +1166,9 @@ func (r *Runner) runPlanCreation(ctx context.Context) error {
 	return fmt.Errorf("max plan iterations (%d) reached without completion", maxPlanIterations)
 }
 
-// handlePatternMatchError checks if err is a PatternMatchError or LimitPatternError and logs appropriate messages.
-// Returns the error if it's a pattern match (to trigger graceful exit), nil otherwise.
+// handlePatternMatchError checks if err is a PatternMatchError, LimitPatternError, or
+// CodexInfraError and logs appropriate messages. Returns the error if it's a recognized
+// typed error (to trigger graceful non-zero exit), nil otherwise.
 func (r *Runner) handlePatternMatchError(err error, tool string) error {
 	var patternErr *executor.PatternMatchError
 	if errors.As(err, &patternErr) {
@@ -1181,7 +1182,42 @@ func (r *Runner) handlePatternMatchError(err error, tool string) error {
 		r.log.Print("run '%s' for more information", limitErr.HelpCmd)
 		return err
 	}
+	var infraErr *executor.CodexInfraError
+	if errors.As(err, &infraErr) {
+		r.renderCodexInfraBanner(infraErr, tool)
+		return err
+	}
 	return nil
+}
+
+// renderCodexInfraBanner emits a multi-line, visually distinct banner describing a
+// known codex infrastructure failure, the matched stderr line, and actionable recovery
+// steps. Keeps exit behavior unchanged, the caller still returns a non-nil error so
+// the run fails loudly.
+func (r *Runner) renderCodexInfraBanner(e *executor.CodexInfraError, tool string) {
+	const divider = "================================================================"
+	r.log.PrintRaw("\n" + divider + "\n")
+	r.log.PrintRaw("CODEX REVIEW FAILED -- INFRASTRUCTURE ERROR (" + e.Kind + ")\n")
+	r.log.PrintRaw(divider + "\n")
+	r.log.PrintRaw("tool: " + tool + "\n")
+	r.log.PrintRaw("matched: " + e.Detail + "\n")
+	r.log.PrintRaw("\nlikely cause and recovery:\n")
+	switch e.Kind {
+	case "readonly_fs":
+		r.log.PrintRaw("  - Docker Desktop VM disk went read-only (corruption or mount failure)\n")
+		r.log.PrintRaw("  - try: `wsl --shutdown` then restart Docker Desktop\n")
+		r.log.PrintRaw("  - verify: `docker exec <container> dmesg | tail -30` should show EXT4-fs errors if corruption\n")
+	case "disk_full":
+		r.log.PrintRaw("  - Docker overlay or VM disk is full\n")
+		r.log.PrintRaw("  - check: `docker system df` and `docker system prune`\n")
+		r.log.PrintRaw("  - Docker Desktop > Settings > Resources > Virtual disk limit\n")
+	case "session_init":
+		r.log.PrintRaw("  - codex session init failed (non-readonly cause)\n")
+		r.log.PrintRaw("  - check: `codex /status` on the host for auth/quota state\n")
+		r.log.PrintRaw("  - verify: ~/.codex/auth.json is valid and not expired\n")
+	}
+	r.log.PrintRaw("\nclaude review work on the branch is preserved. run exits non-zero.\n")
+	r.log.PrintRaw(divider + "\n\n")
 }
 
 // runWithLimitRetry wraps an executor Run() call with rate limit retry logic and optional session timeout.

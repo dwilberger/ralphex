@@ -71,3 +71,13 @@ func (r *Runner) TestClaudeExecutor() Executor {
 func (r *Runner) TestReviewClaudeExecutor() Executor {
 	return r.reviewClaude
 }
+
+// TestHandlePatternMatchError exposes handlePatternMatchError for black-box testing.
+func (r *Runner) TestHandlePatternMatchError(err error, tool string) error {
+	return r.handlePatternMatchError(err, tool)
+}
+
+// NewRunnerWithLogger creates a minimal Runner with only the logger set, for unit testing helpers.
+func NewRunnerWithLogger(log Logger) *Runner {
+	return &Runner{log: log}
+}

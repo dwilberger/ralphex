@@ -3945,3 +3945,82 @@ func TestRunner_New_ModelEffortWiring(t *testing.T) {
 		})
 	}
 }
+
+func TestRunner_HandlePatternMatchError_CodexInfraError_ReadOnly(t *testing.T) {
+	logger := &mocks.LoggerMock{
+		PrintFunc:    func(_ string, _ ...any) {},
+		PrintRawFunc: func(_ string, _ ...any) {},
+	}
+	r := processor.NewRunnerWithLogger(logger)
+
+	err := &executor.CodexInfraError{
+		Kind:   "readonly_fs",
+		Detail: "ERROR codex_core_skills::manager: failed to install system skills: io error while remove existing system skills dir: Read-only file system (os error 30)",
+		Inner:  fmt.Errorf("exit status 1"),
+	}
+
+	got := r.TestHandlePatternMatchError(err, "codex")
+
+	require.Error(t, got)
+	assert.Same(t, err, got, "handler must return the original error so exit code stays non-zero")
+
+	// verify banner was rendered via PrintRaw
+	rawCalls := logger.PrintRawCalls()
+	require.NotEmpty(t, rawCalls, "expected a banner via PrintRaw")
+	combined := ""
+	for _, c := range rawCalls {
+		combined += c.Format
+	}
+	assert.Contains(t, combined, "CODEX REVIEW FAILED")
+	assert.Contains(t, combined, "readonly_fs")
+	assert.Contains(t, combined, "Read-only file system")
+	assert.Contains(t, combined, "wsl --shutdown") // recovery hint for readonly_fs
+}
+
+func TestRunner_HandlePatternMatchError_CodexInfraError_DiskFull(t *testing.T) {
+	logger := &mocks.LoggerMock{
+		PrintFunc:    func(_ string, _ ...any) {},
+		PrintRawFunc: func(_ string, _ ...any) {},
+	}
+	r := processor.NewRunnerWithLogger(logger)
+
+	err := &executor.CodexInfraError{
+		Kind:   "disk_full",
+		Detail: "write: No space left on device (os error 28)",
+		Inner:  fmt.Errorf("exit status 1"),
+	}
+
+	got := r.TestHandlePatternMatchError(err, "codex")
+
+	require.Error(t, got)
+	combined := ""
+	for _, c := range logger.PrintRawCalls() {
+		combined += c.Format
+	}
+	assert.Contains(t, combined, "disk_full")
+	assert.Contains(t, combined, "docker system df") // recovery hint for disk_full
+}
+
+func TestRunner_HandlePatternMatchError_CodexInfraError_SessionInit(t *testing.T) {
+	logger := &mocks.LoggerMock{
+		PrintFunc:    func(_ string, _ ...any) {},
+		PrintRawFunc: func(_ string, _ ...any) {},
+	}
+	r := processor.NewRunnerWithLogger(logger)
+
+	err := &executor.CodexInfraError{
+		Kind:   "session_init",
+		Detail: "Failed to initialize session: some other reason",
+		Inner:  fmt.Errorf("exit status 1"),
+	}
+
+	got := r.TestHandlePatternMatchError(err, "codex")
+
+	require.Error(t, got)
+	combined := ""
+	for _, c := range logger.PrintRawCalls() {
+		combined += c.Format
+	}
+	assert.Contains(t, combined, "session_init")
+	assert.Contains(t, combined, "codex /status") // recovery hint for session_init
+}
