@@ -212,10 +212,13 @@ func (e *CodexExecutor) Run(ctx context.Context, prompt string) Result {
 		if ctx.Err() != nil {
 			finalErr = fmt.Errorf("context error: %w", ctx.Err())
 		} else {
-			// include stderr tail for error context when codex exits with non-zero status
-			if len(stderrRes.lastLines) > 0 {
-				finalErr = fmt.Errorf("codex exited with error: %w\nstderr: %s",
-					waitErr, strings.Join(stderrRes.lastLines, "\n"))
+			stderrTail := strings.Join(stderrRes.lastLines, "\n")
+			// classify known infrastructure failures (read-only fs, disk full, session init)
+			// so the runner can render a banner with recovery guidance
+			if kind, detail := classifyCodexStderr(stderrTail); kind != "" {
+				finalErr = &CodexInfraError{Kind: kind, Detail: detail, Inner: waitErr}
+			} else if stderrTail != "" {
+				finalErr = fmt.Errorf("codex exited with error: %w\nstderr: %s", waitErr, stderrTail)
 			} else {
 				finalErr = fmt.Errorf("codex exited with error: %w", waitErr)
 			}

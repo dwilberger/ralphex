@@ -968,6 +968,52 @@ func TestCodexExecutor_Run_LimitPattern_ContextCanceled(t *testing.T) {
 	assert.NotErrorAs(t, result.Error, &patternErr, "should not return PatternMatchError on cancellation")
 }
 
+func TestCodexExecutor_Run_InfraError_ReadOnly(t *testing.T) {
+	// simulate codex exiting non-zero with read-only fs in stderr
+	stderrText := "Reading prompt from stdin...\n" +
+		"2026-04-19T00:28:01.757560Z ERROR codex_core_skills::manager: failed to install system skills: io error while remove existing system skills dir: Read-only file system (os error 30)\n"
+
+	mock := &mockCodexRunner{
+		runFunc: func(_ context.Context, _ string, _ ...string) (CodexStreams, func() error, error) {
+			return CodexStreams{
+				Stderr: strings.NewReader(stderrText),
+				Stdout: strings.NewReader(""),
+			}, func() error { return fmt.Errorf("exit status 1") }, nil
+		},
+	}
+	e := &CodexExecutor{runner: mock}
+
+	result := e.Run(context.Background(), "review please")
+
+	require.Error(t, result.Error)
+	var infraErr *CodexInfraError
+	require.True(t, errors.As(result.Error, &infraErr), "expected CodexInfraError, got %T: %v", result.Error, result.Error)
+	assert.Equal(t, "readonly_fs", infraErr.Kind)
+	assert.Contains(t, infraErr.Detail, "Read-only file system")
+}
+
+func TestCodexExecutor_Run_NonInfraErrorPreserved(t *testing.T) {
+	// unknown stderr: current wrapped error behavior is preserved (not CodexInfraError)
+	stderrText := "some random codex failure\n"
+
+	mock := &mockCodexRunner{
+		runFunc: func(_ context.Context, _ string, _ ...string) (CodexStreams, func() error, error) {
+			return CodexStreams{
+				Stderr: strings.NewReader(stderrText),
+				Stdout: strings.NewReader(""),
+			}, func() error { return fmt.Errorf("exit status 1") }, nil
+		},
+	}
+	e := &CodexExecutor{runner: mock}
+
+	result := e.Run(context.Background(), "review please")
+
+	require.Error(t, result.Error)
+	var infraErr *CodexInfraError
+	assert.False(t, errors.As(result.Error, &infraErr), "non-infra error should NOT be classified as CodexInfraError")
+	assert.Contains(t, result.Error.Error(), "codex exited with error")
+}
+
 func TestClassifyCodexStderr(t *testing.T) {
 	tests := []struct {
 		name     string
