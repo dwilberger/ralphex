@@ -32,7 +32,7 @@ Use a locally-built image when iterating on ralphex itself; use the official rel
 Local build (for dev on ralphex):
 
 ```bash
-docker build -t ralphex-local:dev .
+docker build -t ghcr.io/umputun/ralphex:dev .
 docker build -t ralphex-go-local:dev -f Dockerfile-go --build-arg BASE_TAG=dev .
 export RALPHEX_IMAGE=ralphex-go-local:dev
 ralphex docs/plans/feature.md
