@@ -3993,6 +3993,7 @@ func TestRunner_HandlePatternMatchError_CodexInfraError_DiskFull(t *testing.T) {
 	got := r.TestHandlePatternMatchError(err, "codex")
 
 	require.Error(t, got)
+	assert.Same(t, err, got, "handler must return the original error so exit code stays non-zero")
 	combined := ""
 	for _, c := range logger.PrintRawCalls() {
 		combined += c.Format
@@ -4017,6 +4018,7 @@ func TestRunner_HandlePatternMatchError_CodexInfraError_SessionInit(t *testing.T
 	got := r.TestHandlePatternMatchError(err, "codex")
 
 	require.Error(t, got)
+	assert.Same(t, err, got, "handler must return the original error so exit code stays non-zero")
 	combined := ""
 	for _, c := range logger.PrintRawCalls() {
 		combined += c.Format
