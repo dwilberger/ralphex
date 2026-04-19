@@ -50,7 +50,8 @@ RUN chmod +x /srv/ralphex
 
 # copy init script (baseimage runs /srv/init.sh before main command)
 COPY scripts/internal/init-docker.sh /srv/init.sh
-RUN chmod +x /srv/init.sh
+# normalize line endings (Windows checkouts produce CRLF which breaks sh shebang)
+RUN dos2unix /srv/init.sh && chmod +x /srv/init.sh
 
 # expose web dashboard port
 EXPOSE 8080

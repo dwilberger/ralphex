@@ -30,17 +30,17 @@ func (e *CodexInfraError) Unwrap() error { return e.Inner }
 // readonly_fs takes priority over session_init because a failed session init rooted in
 // a read-only filesystem should be reported as readonly_fs so the user fixes the real cause.
 func classifyCodexStderr(stderr string) (kind, detail string) {
-	for _, line := range strings.Split(stderr, "\n") {
+	for line := range strings.SplitSeq(stderr, "\n") {
 		if strings.Contains(line, "Read-only file system") {
 			return "readonly_fs", strings.TrimSpace(line)
 		}
 	}
-	for _, line := range strings.Split(stderr, "\n") {
+	for line := range strings.SplitSeq(stderr, "\n") {
 		if strings.Contains(line, "No space left on device") {
 			return "disk_full", strings.TrimSpace(line)
 		}
 	}
-	for _, line := range strings.Split(stderr, "\n") {
+	for line := range strings.SplitSeq(stderr, "\n") {
 		if strings.Contains(line, "Failed to initialize session") ||
 			strings.Contains(line, "Failed to create session") {
 			return "session_init", strings.TrimSpace(line)

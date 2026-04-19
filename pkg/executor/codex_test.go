@@ -978,7 +978,7 @@ func TestCodexExecutor_Run_InfraError_ReadOnly(t *testing.T) {
 			return CodexStreams{
 				Stderr: strings.NewReader(stderrText),
 				Stdout: strings.NewReader(""),
-			}, func() error { return fmt.Errorf("exit status 1") }, nil
+			}, func() error { return errors.New("exit status 1") }, nil
 		},
 	}
 	e := &CodexExecutor{runner: mock}
@@ -987,7 +987,7 @@ func TestCodexExecutor_Run_InfraError_ReadOnly(t *testing.T) {
 
 	require.Error(t, result.Error)
 	var infraErr *CodexInfraError
-	require.True(t, errors.As(result.Error, &infraErr), "expected CodexInfraError, got %T: %v", result.Error, result.Error)
+	require.ErrorAs(t, result.Error, &infraErr, "expected CodexInfraError, got %T: %v", result.Error, result.Error)
 	assert.Equal(t, "readonly_fs", infraErr.Kind)
 	assert.Contains(t, infraErr.Detail, "Read-only file system")
 }
@@ -1001,7 +1001,7 @@ func TestCodexExecutor_Run_NonInfraErrorPreserved(t *testing.T) {
 			return CodexStreams{
 				Stderr: strings.NewReader(stderrText),
 				Stdout: strings.NewReader(""),
-			}, func() error { return fmt.Errorf("exit status 1") }, nil
+			}, func() error { return errors.New("exit status 1") }, nil
 		},
 	}
 	e := &CodexExecutor{runner: mock}
@@ -1010,7 +1010,7 @@ func TestCodexExecutor_Run_NonInfraErrorPreserved(t *testing.T) {
 
 	require.Error(t, result.Error)
 	var infraErr *CodexInfraError
-	assert.False(t, errors.As(result.Error, &infraErr), "non-infra error should NOT be classified as CodexInfraError")
+	assert.NotErrorAs(t, result.Error, &infraErr, "non-infra error should NOT be classified as CodexInfraError")
 	assert.Contains(t, result.Error.Error(), "codex exited with error")
 }
 

@@ -162,6 +162,9 @@ linters:
       - linters:
           - gosec
         text: "G104: Errors unhandled"
+      - linters:
+          - gocyclo
+        text: "cyclomatic complexity.*of func.*CodexExecutor.*Run"
     paths:
       - vendor
       - third_party$

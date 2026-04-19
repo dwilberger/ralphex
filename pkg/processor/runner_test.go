@@ -3956,7 +3956,7 @@ func TestRunner_HandlePatternMatchError_CodexInfraError_ReadOnly(t *testing.T) {
 	err := &executor.CodexInfraError{
 		Kind:   "readonly_fs",
 		Detail: "ERROR codex_core_skills::manager: failed to install system skills: io error while remove existing system skills dir: Read-only file system (os error 30)",
-		Inner:  fmt.Errorf("exit status 1"),
+		Inner:  errors.New("exit status 1"),
 	}
 
 	got := r.TestHandlePatternMatchError(err, "codex")
@@ -3967,10 +3967,11 @@ func TestRunner_HandlePatternMatchError_CodexInfraError_ReadOnly(t *testing.T) {
 	// verify banner was rendered via PrintRaw
 	rawCalls := logger.PrintRawCalls()
 	require.NotEmpty(t, rawCalls, "expected a banner via PrintRaw")
-	combined := ""
+	var sb1 strings.Builder
 	for _, c := range rawCalls {
-		combined += c.Format
+		sb1.WriteString(c.Format)
 	}
+	combined := sb1.String()
 	assert.Contains(t, combined, "CODEX REVIEW FAILED")
 	assert.Contains(t, combined, "readonly_fs")
 	assert.Contains(t, combined, "Read-only file system")
@@ -3987,17 +3988,18 @@ func TestRunner_HandlePatternMatchError_CodexInfraError_DiskFull(t *testing.T) {
 	err := &executor.CodexInfraError{
 		Kind:   "disk_full",
 		Detail: "write: No space left on device (os error 28)",
-		Inner:  fmt.Errorf("exit status 1"),
+		Inner:  errors.New("exit status 1"),
 	}
 
 	got := r.TestHandlePatternMatchError(err, "codex")
 
 	require.Error(t, got)
 	assert.Same(t, err, got, "handler must return the original error so exit code stays non-zero")
-	combined := ""
+	var sb strings.Builder
 	for _, c := range logger.PrintRawCalls() {
-		combined += c.Format
+		sb.WriteString(c.Format)
 	}
+	combined := sb.String()
 	assert.Contains(t, combined, "disk_full")
 	assert.Contains(t, combined, "docker system df") // recovery hint for disk_full
 }
@@ -4012,17 +4014,18 @@ func TestRunner_HandlePatternMatchError_CodexInfraError_SessionInit(t *testing.T
 	err := &executor.CodexInfraError{
 		Kind:   "session_init",
 		Detail: "Failed to initialize session: some other reason",
-		Inner:  fmt.Errorf("exit status 1"),
+		Inner:  errors.New("exit status 1"),
 	}
 
 	got := r.TestHandlePatternMatchError(err, "codex")
 
 	require.Error(t, got)
 	assert.Same(t, err, got, "handler must return the original error so exit code stays non-zero")
-	combined := ""
+	var sb strings.Builder
 	for _, c := range logger.PrintRawCalls() {
-		combined += c.Format
+		sb.WriteString(c.Format)
 	}
+	combined := sb.String()
 	assert.Contains(t, combined, "session_init")
 	assert.Contains(t, combined, "codex /status") // recovery hint for session_init
 }
@@ -4037,7 +4040,7 @@ func TestRunner_HandlePatternMatchError_CodexInfraError_UnknownKind(t *testing.T
 	err := &executor.CodexInfraError{
 		Kind:   "future_unknown_kind",
 		Detail: "some unmapped codex error",
-		Inner:  fmt.Errorf("exit status 1"),
+		Inner:  errors.New("exit status 1"),
 	}
 
 	got := r.TestHandlePatternMatchError(err, "codex")
@@ -4045,10 +4048,11 @@ func TestRunner_HandlePatternMatchError_CodexInfraError_UnknownKind(t *testing.T
 	require.Error(t, got)
 	assert.Same(t, err, got, "handler must return the original error so exit code stays non-zero")
 
-	combined := ""
+	var sb strings.Builder
 	for _, c := range logger.PrintRawCalls() {
-		combined += c.Format
+		sb.WriteString(c.Format)
 	}
+	combined := sb.String()
 	assert.Contains(t, combined, "CODEX REVIEW FAILED")
 	assert.Contains(t, combined, "future_unknown_kind")
 	assert.Contains(t, combined, "unrecognized infrastructure kind")
