@@ -967,3 +967,63 @@ func TestCodexExecutor_Run_LimitPattern_ContextCanceled(t *testing.T) {
 	var patternErr *PatternMatchError
 	assert.NotErrorAs(t, result.Error, &patternErr, "should not return PatternMatchError on cancellation")
 }
+
+func TestClassifyCodexStderr(t *testing.T) {
+	tests := []struct {
+		name     string
+		stderr   string
+		wantKind string
+		wantLine string // substring that must appear in CodexInfraError.Detail
+	}{
+		{
+			name:     "read-only fs from skills manager",
+			stderr:   "Reading prompt from stdin...\nERROR codex_core_skills::manager: failed to install system skills: io error while remove existing system skills dir: Read-only file system (os error 30)\n",
+			wantKind: "readonly_fs",
+			wantLine: "Read-only file system",
+		},
+		{
+			name:     "read-only fs from models cache",
+			stderr:   "ERROR codex_models_manager::cache: failed to write models cache: Read-only file system (os error 30)\n",
+			wantKind: "readonly_fs",
+			wantLine: "Read-only file system",
+		},
+		{
+			name:     "session init failure (downstream of readonly)",
+			stderr:   "Error: thread/start: thread/start failed: error creating thread: Fatal error: Failed to initialize session: Read-only file system (os error 30)\n",
+			wantKind: "readonly_fs", // readonly_fs takes priority since the root cause is surfaced
+			wantLine: "Read-only file system",
+		},
+		{
+			name:     "session init without readonly",
+			stderr:   "Error: thread/start failed: error creating thread: Fatal error: Failed to initialize session: some other reason\n",
+			wantKind: "session_init",
+			wantLine: "Failed to initialize session",
+		},
+		{
+			name:     "disk full",
+			stderr:   "ERROR codex_core::codex: write: No space left on device (os error 28)\n",
+			wantKind: "disk_full",
+			wantLine: "No space left on device",
+		},
+		{
+			name:     "unknown error",
+			stderr:   "some random error that is not infra related\n",
+			wantKind: "",
+		},
+		{
+			name:     "empty stderr",
+			stderr:   "",
+			wantKind: "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			kind, detail := classifyCodexStderr(tc.stderr)
+			assert.Equal(t, tc.wantKind, kind)
+			if tc.wantLine != "" {
+				assert.Contains(t, detail, tc.wantLine)
+			}
+		})
+	}
+}

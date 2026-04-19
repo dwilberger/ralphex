@@ -10,6 +10,45 @@ import (
 	"strings"
 )
 
+// CodexInfraError is returned when codex fails due to a known infrastructure issue
+// (read-only filesystem, disk full, session init failure). Callers render a banner
+// with recovery guidance and then return the error so exit code stays non-zero.
+type CodexInfraError struct {
+	Kind   string // "readonly_fs", "disk_full", "session_init"
+	Detail string // stderr line that matched
+	Inner  error  // underlying wait error, preserved for unwrap
+}
+
+func (e *CodexInfraError) Error() string {
+	return fmt.Sprintf("codex infrastructure error (%s): %s", e.Kind, e.Detail)
+}
+
+func (e *CodexInfraError) Unwrap() error { return e.Inner }
+
+// classifyCodexStderr scans codex stderr text for known infrastructure failure patterns.
+// returns kind ("" if no match) and the matched line (for display to the user).
+// readonly_fs takes priority over session_init because a failed session init rooted in
+// a read-only filesystem should be reported as readonly_fs so the user fixes the real cause.
+func classifyCodexStderr(stderr string) (kind, detail string) {
+	for _, line := range strings.Split(stderr, "\n") {
+		if strings.Contains(line, "Read-only file system") {
+			return "readonly_fs", strings.TrimSpace(line)
+		}
+	}
+	for _, line := range strings.Split(stderr, "\n") {
+		if strings.Contains(line, "No space left on device") {
+			return "disk_full", strings.TrimSpace(line)
+		}
+	}
+	for _, line := range strings.Split(stderr, "\n") {
+		if strings.Contains(line, "Failed to initialize session") ||
+			strings.Contains(line, "Failed to create session") {
+			return "session_init", strings.TrimSpace(line)
+		}
+	}
+	return "", ""
+}
+
 // CodexStreams holds both stderr and stdout from codex command.
 type CodexStreams struct {
 	Stderr io.Reader
