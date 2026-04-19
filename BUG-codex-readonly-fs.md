@@ -73,6 +73,101 @@ stderr: Reading prompt from stdin...
 Error: thread/start: thread/start failed: error creating thread: Fatal error: Failed to initialize session: Read-only file system (os error 30)
 ```
 
+## Incident 3 — 2026-04-19, run `rules-dry-run-reuse-and-audit`
+
+- **Container name**: `ralphex-compliance-pnh-2026-04-19-rules-dry-run-reuse-and-audit`
+- **Plan**: `docs/plans/2026-04-19-rules-dry-run-reuse-and-audit.md` (16 tasks)
+- **Claude phase duration**: ~3 hours (including 3 claude review iterations, with a 20-minute session timeout on review iteration 2 that triggered an automatic retry into iteration 3)
+- **Exit code**: 1
+- **Ralphex image**: `ralphex-go-local:dev` (contains the 2026-04-19 resolution patches — boot probe, error classification, banner)
+- **Commits produced before failure**: 18 (16 feat covering all tasks + 2 fix from 3 claude review iterations)
+- **Branch preserved**: yes — worktree auto-removed cleanly before codex failure
+- **Real bugs caught by claude reviews (not by codex)**:
+  - `discardDryRun` clearing local state even on HTTP error, hiding failures
+  - `getRuleHistory` `ORDER BY` on text-cast timestamps producing wrong sort under non-UTC session TZ
+  - `upsertPlayerIdentity` hardcoding `mode: "scheduled"` even in UI-triggered execute path, polluting `tbl_dw_usage` metrics
+  - `seed-rules.ts` bumping `updated_at` on idempotent runs (should only bump when parameters actually change)
+  - `persistFromDryRun` non-atomic write paths (sql import missing, transaction boundary wrong)
+  - `diffParams(form, saved)` argument order double-inverted, accidentally producing correct output but with unclear semantics
+
+### Codex error tail (incident 3)
+
+Note the compact format — this is the classified `CodexInfraError` banner from the 2026-04-19 fix. The full multi-line traceback from incidents 1-2 is no longer surfaced to the user.
+
+```
+--- codex external review ---
+
+--- codex iteration 1 ---
+
+================================================================
+CODEX REVIEW FAILED -- INFRASTRUCTURE ERROR (readonly_fs)
+================================================================
+tool: codex
+matched: 2026-04-19T19:00:57.093641Z ERROR codex_core_skills::manager: failed to install system skills: io error while remove existing system skills dir: Read-only file system (os error 30)
+
+likely cause and recovery:
+  - Docker Desktop VM disk went read-only (corruption or mount failure)
+  - try: `wsl --shutdown` then restart Docker Desktop
+  - verify: `docker exec <container> dmesg | tail -30` should show EXT4-fs errors if corruption
+
+claude review work on the branch is preserved. run exits non-zero.
+================================================================
+```
+
+## Incident 4 — 2026-04-19, run `dw-cost-tracking` (parallel with incident 3)
+
+- **Container name**: `ralphex-compliance-pnh-2026-04-19-dw-cost-tracking`
+- **Plan**: `docs/plans/2026-04-19-dw-cost-tracking.md` (16 tasks)
+- **Claude phase duration**: ~2.25 hours (faster than incident 3; smaller helper-shaped tasks early, and claude reviews converged in 3 iterations with no session timeouts)
+- **Exit code**: 1
+- **Ralphex image**: `ralphex-go-local:dev` (same patched image as incident 3)
+- **Commits produced before failure**: 22 (16 feat + 3 fix from claude reviews + 3 meta "mark Task N complete")
+- **Branch preserved**: yes — worktree auto-removed cleanly before codex failure
+- **Real bugs caught by claude reviews (not by codex)**:
+  - Dockerfile missing `COPY config/` to the runner stage, causing **server crash on startup** in production (critical — would have shipped broken)
+  - `runCostBackfill` doing N sequential DB updates in error and unmatched paths, refactored to batched `inArray` updates
+  - DMV reconciliation query bypassing preflight required `rawClient` export from `src/lib/dw/index.ts` (preflight rejects the query because it doesn't filter by `DwDate`)
+  - `cost-backfill.ts` LIKE wildcards wrong, unused `startedAt` variable
+  - `fillDailyGaps` using UTC `Date.now()` instead of BRT-aware helper, producing gaps at the wrong day boundary
+  - `maxBackfillAttempts` config not propagated into `DwUsageTable` component, so the "pending" vs "failed" distinction in the UI was always computing against default rather than configured value
+  - Wrong advisory lock comment (referenced old key scheme)
+  - Test fixes (spy target moved, duplicate tests consolidated, improved cost assertion, trace-wrap regex precision)
+
+### Codex error tail (incident 4)
+
+Identical classified-error format as incident 3, different timestamp:
+
+```
+--- codex external review ---
+
+--- codex iteration 1 ---
+
+================================================================
+CODEX REVIEW FAILED -- INFRASTRUCTURE ERROR (readonly_fs)
+================================================================
+tool: codex
+matched: 2026-04-19T18:11:09.643251Z ERROR codex_core_skills::manager: failed to install system skills: io error while remove existing system skills dir: Read-only file system (os error 30)
+
+likely cause and recovery:
+  - Docker Desktop VM disk went read-only (corruption or mount failure)
+  - try: `wsl --shutdown` then restart Docker Desktop
+  - verify: `docker exec <container> dmesg | tail -30` should show EXT4-fs errors if corruption
+
+claude review work on the branch is preserved. run exits non-zero.
+================================================================
+```
+
+## Validation notes from incidents 3 and 4
+
+Both runs used the patched `ralphex-go-local:dev` image and fired through `/c/Users/Daniel/git/orchestration-setup/scripts/ralphex-run.sh` (after the wrapper was patched to honor `RALPHEX_IMAGE` env var and to mount `~/.claude.json` alongside `~/.claude`, which was missing before and caused a separate auth failure on the first attempt).
+
+Observations about the 2026-04-19 resolution in real usage:
+
+1. **Boot probe did not fire** in either run. Container init completed cleanly — the `~/.codex` mount was writable at startup. The failure appeared mid-run, ~2-3 hours in, when codex actually tried to touch the filesystem. This matches the stated scope of the fix ("catches pre-existing bad state at boot") and is not a regression — boot probe cannot predict a VM going read-only hours later.
+2. **Error classification worked as designed**. Codex stderr was matched to the expected `Read-only file system` pattern, wrapped in `CodexInfraError`, and surfaced via the banner. The user (operator monitoring live) knew within seconds what happened and what to do. Compare to incidents 1-2 where the error was buried in a multi-line traceback and took 20+ minutes to parse.
+3. **Banner recovery steps were correct**. After both runs completed, `wsl --shutdown` + restart of Docker Desktop cleared the VM state and a follow-up run would have been able to reach codex (not attempted in these incidents because the claude review work was already merge-ready).
+4. **Parallel runs both hit EROFS**. Incidents 3 and 4 ran concurrently with `DASHBOARD_PORT=8080` and `DASHBOARD_PORT=8081`, each in its own git worktree (`--worktree`), each with its own named container. Both hit the read-only error at codex phase — incident 4 first (18:11 UTC, ~2.25h in), incident 3 second (19:00 UTC, ~3h in). This strongly suggests the failure is a property of the host Docker Desktop VM state rather than anything container-local. Running two containers in parallel did not cause the failure; either would have failed on its own given enough wall-clock time.
+
 ## Container startup warnings (non-fatal but related)
 
 Both runs started with a flood of `chown: Read-only file system` errors on `/home/app/.codex/` paths during container init. Examples:
