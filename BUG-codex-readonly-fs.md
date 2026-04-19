@@ -126,3 +126,19 @@ Only listing what's actionable inside the ralphex project — the real fix belon
 ## Workaround currently in use
 
 Accept that codex review doesn't run. Treat the 3 claude review iterations as the quality gate. This has worked across both incidents — the 4 fix commits per run caught real bugs that would have otherwise shipped. The merge pipeline from the compliance-pnh side is documented and produces clean fast-forwards once the branch is reviewed manually.
+
+## Resolution (2026-04-19)
+
+Implemented per `docs/plans/2026-04-19-codex-readonly-diagnostics.md`:
+
+1. **Boot-time probe** (`scripts/internal/init-docker.sh`): container aborts at init when `/home/app/.codex` is not writable after `cp -rL`. Saves hours of wasted claude work when Docker Desktop VM is in a bad state.
+2. **Error classification** (`pkg/executor/codex.go`): codex stderr is scanned for `Read-only file system`, `No space left on device`, and `Failed to (initialize|create) session`. Matches produce a typed `CodexInfraError`.
+3. **Actionable banner** (`pkg/processor/runner.go`): when a `CodexInfraError` reaches the runner, a multi-line banner prints the kind, matched stderr line, and recovery steps (e.g., `wsl --shutdown`, `docker system df`).
+
+Exit behavior is unchanged, a codex failure still exits non-zero. The change is diagnostic visibility, not silent degradation.
+
+What this does NOT fix:
+- The underlying cause of EROFS in long-running Docker Desktop WSL2 containers. That remains a Docker/host issue. The fixes above catch it early (boot probe) or make it obvious when it fires mid-run (banner).
+
+Workarounds that are no longer needed:
+- Manually tailing claude progress to see why the run failed, the banner makes it obvious.
