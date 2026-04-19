@@ -1215,6 +1215,9 @@ func (r *Runner) renderCodexInfraBanner(e *executor.CodexInfraError, tool string
 		r.log.PrintRaw("  - codex session init failed (non-readonly cause)\n")
 		r.log.PrintRaw("  - check: `codex /status` on the host for auth/quota state\n")
 		r.log.PrintRaw("  - verify: ~/.codex/auth.json is valid and not expired\n")
+	default:
+		r.log.PrintRaw("  - unrecognized infrastructure kind: " + e.Kind + "\n")
+		r.log.PrintRaw("  - inspect the matched line above and consult the codex or Docker logs\n")
 	}
 	r.log.PrintRaw("\nclaude review work on the branch is preserved. run exits non-zero.\n")
 	r.log.PrintRaw(divider + "\n\n")

@@ -4026,3 +4026,30 @@ func TestRunner_HandlePatternMatchError_CodexInfraError_SessionInit(t *testing.T
 	assert.Contains(t, combined, "session_init")
 	assert.Contains(t, combined, "codex /status") // recovery hint for session_init
 }
+
+func TestRunner_HandlePatternMatchError_CodexInfraError_UnknownKind(t *testing.T) {
+	logger := &mocks.LoggerMock{
+		PrintFunc:    func(_ string, _ ...any) {},
+		PrintRawFunc: func(_ string, _ ...any) {},
+	}
+	r := processor.NewRunnerWithLogger(logger)
+
+	err := &executor.CodexInfraError{
+		Kind:   "future_unknown_kind",
+		Detail: "some unmapped codex error",
+		Inner:  fmt.Errorf("exit status 1"),
+	}
+
+	got := r.TestHandlePatternMatchError(err, "codex")
+
+	require.Error(t, got)
+	assert.Same(t, err, got, "handler must return the original error so exit code stays non-zero")
+
+	combined := ""
+	for _, c := range logger.PrintRawCalls() {
+		combined += c.Format
+	}
+	assert.Contains(t, combined, "CODEX REVIEW FAILED")
+	assert.Contains(t, combined, "future_unknown_kind")
+	assert.Contains(t, combined, "unrecognized infrastructure kind")
+}
