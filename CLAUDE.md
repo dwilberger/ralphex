@@ -25,6 +25,24 @@ go get -u -tags=e2e github.com/playwright-community/playwright-go  # update e2e 
 go mod tidy && go mod vendor                             # tidy and re-vendor
 ```
 
+## Active Local Fix (remove after upstream release)
+
+Master currently carries the codex read-only-fs diagnostic fix described in `BUG-codex-readonly-fs.md` and `docs/plans/2026-04-19-codex-readonly-diagnostics.md`. The fix is NOT yet on the official `ghcr.io/umputun/ralphex-go:latest` image. To exercise it when launching ralphex from this checkout, use the locally-built image:
+
+```bash
+# build base + Go variant locally (already done if ralphex-go-local:dev exists)
+docker build -t ghcr.io/umputun/ralphex:dev .
+docker build -t ralphex-go-local:dev -f Dockerfile-go --build-arg BASE_TAG=dev .
+
+# point the wrapper at the local image
+export RALPHEX_IMAGE=ralphex-go-local:dev
+ralphex docs/plans/feature.md
+```
+
+Without `RALPHEX_IMAGE` set, `ralphex` pulls the published image and runs WITHOUT the diagnostic banner / boot probe.
+
+Remove this section once the fix ships in an official release and `ghcr.io/umputun/ralphex-go:latest` includes it.
+
 ## Docker Image: Local Build vs Release
 
 Use a locally-built image when iterating on ralphex itself; use the official release (`ghcr.io/umputun/ralphex-go:latest`) when driving other projects with ralphex.
