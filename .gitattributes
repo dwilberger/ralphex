@@ -1,2 +1,7 @@
 # enforce LF line endings for shell scripts so they work inside Linux containers
 *.sh text eol=lf
+
+# enforce LF for markdown and Go sources so Windows checkouts do not produce
+# CRLF-churn diffs when edited on mixed-platform workstations
+*.md text eol=lf
+*.go text eol=lf
